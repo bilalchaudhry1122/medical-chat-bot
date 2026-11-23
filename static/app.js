@@ -703,6 +703,12 @@
       sub.className = "hint";
       sub.textContent = [m.route, m.manufacturer].filter(Boolean).join(" · ");
       card.appendChild(sub);
+      if (m.corrected) {
+        const fix = document.createElement("p");
+        fix.className = "hint";
+        fix.textContent = (lang === "ur" ? "نتائج برائے: " : "Showing results for: ") + m.corrected;
+        card.insertBefore(fix, h);
+      }
       for (const s of m.sections) {
         const det = document.createElement("details");
         if (["Uses", "Purpose"].includes(s.label)) det.open = true;
