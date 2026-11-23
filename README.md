@@ -1,207 +1,118 @@
-# Medical Chatbot with RAG
+# MediBot: AI Medical Assistant (RAG)
 
-A sophisticated medical chatbot built using Retrieval Augmented Generation (RAG) that provides accurate medical information by combining Large Language Models (LLMs) with a vector database for knowledge retrieval.
+MediBot answers general medical questions using Retrieval-Augmented Generation: it searches trusted
+medical reference books (currently *The Gale Encyclopedia of Medicine, 2nd ed.*), then asks GPT-4o to
+answer **from those passages, with page citations**.
 
-## 🚀 Features
+> MediBot gives general information, not medical advice or a diagnosis.
 
-- **RAG Architecture**: Combines LLM with vector database for accurate, context-aware responses
-- **HuggingFace Embeddings**: Uses `sentence-transformers/all-MiniLM-L6-v2` for text embeddings
-- **Pinecone Vector Database**: Fast and scalable vector storage for medical knowledge
-- **OpenAi gpt-4o**: Powered by Google's latest Gemini model
-- **LangChain Integration**: Seamless integration with LangChain for RAG pipeline
-- **Flask Web Interface**: Clean, modern web UI for interacting with the chatbot
-- **PDF Document Processing**: Automatically processes and chunks PDF documents
+## ✨ Features
 
-## 📋 Prerequisites
+**Answers**
+- **Streaming answers** that appear word by word.
+- **Source citations**: every answer lists the book and page it used, with the passage.
+- **Hybrid search**: keyword (BM25) + vector search (`BAAI/bge-small-en-v1.5`) on Pinecone.
+- **Smart follow-ups**: "what are its symptoms?" and Urdu / Roman Urdu questions are rewritten into
+  English search queries before searching.
+- **Suggested follow-up questions** under each answer.
+- **Answer cache**: repeated first questions are answered instantly at no API cost.
 
-- Python 3.8 or higher
-- Pinecone account (free tier available)
-- Google gpt-4o key
-- Medical documents in PDF format
+**Tools**
+- **Guided symptom checker**: one question at a time, ending with which kind of doctor to see and how urgent it seems.
+- **Lab report explainer**: upload a PDF or photo; each value is explained in plain language (files are not stored).
+- **Medicine lookup**: uses, warnings and side effects from U.S. FDA labels (openFDA). No dosages.
+- **Emergency detection**: English, Roman Urdu and Urdu. Shows a banner with tap-to-call numbers (1122, 115, …).
 
-## 🛠️ Installation
+**Users**
+- **Accounts**: email + password sign-up and login, plus optional Google sign-in. Chats made before
+  logging in move into the account, so history follows the user to any device.
+- **Chat history** grouped by date, with search, rename and delete.
+- **👍 / 👎 feedback** on answers.
+- **Share** a read-only link to a chat, or **export it as PDF**.
+- **Voice**: ask by speaking, and have answers read aloud.
+- **Urdu interface** with right-to-left layout, plus a light/dark theme.
+- **Installable app (PWA)** with an offline page.
+- Interactive animated background.
 
-### 1. Clone the repository
+**Operations**
+- **Admin dashboard** (`/admin`): usage, answers per day, satisfaction, most asked questions, 👎 answers and estimated OpenAI cost.
+- **Security**: strict CSP, CSRF tokens, rate limits, input limits, OpenAI moderation, hardened system prompt,
+  session-fixation protection, owner-only access to chats.
+- **Scalable**: SQLite → PostgreSQL, Redis-backed rate limits, Alembic migrations, Docker Compose, `/healthz`.
+- **Tests and CI**: `pytest` suite (AI faked), run on GitHub Actions for every push.
+- **Optional Sentry** error tracking.
 
-```bash
-git clone <your-repo-url>
-cd MedicalChatbot
-```
-
-### 2. Create a virtual environment
-
-```bash
-python -m venv venv
-
-# On Windows
-venv\Scripts\activate
-
-# On macOS/Linux
-source venv/bin/activate
-```
-
-### 3. Install dependencies
+## 🚀 Quick start (local)
 
 ```bash
 pip install -r requirements.txt
+cp .env.example .env            # fill in PINECONE_API_KEY, OPENAI_API_KEY, SECRET_KEY (and ADMIN_EMAILS)
+python store-index.py           # once: builds the knowledge base from PDFs in data/
+python app.py                   # http://127.0.0.1:8080
 ```
 
-### 4. Set up environment variables
+Database tables are created and migrated automatically on start-up (Alembic). You can also run
+`alembic upgrade head` yourself.
 
-Create a `.env` file in the root directory:
+### Adding more books
 
-```env
-PINECONE_API_KEY=your_pinecone_api_key_here
-OPENAI_API_KEY=your_openAi_api_key_here
-```
+Drop more trusted PDFs into `data/` (e.g. the other Gale volumes; the bundled file is **Volume 2, C–F**)
+and run `python store-index.py` again. Chunk ids are stable, so re-running replaces existing chunks
+instead of duplicating them. Use `--reset` to rebuild the index from scratch.
 
-**How to get API keys:**
-- **Pinecone**: Sign up at [https://app.pinecone.io/](https://app.pinecone.io/) and get your API key from the dashboard
-- **openAI**: Get your API key 
-
-### 5. Prepare your medical documents
-
-Place your PDF medical documents in the `data/` directory:
-```
-MedicalChatbot/
-  └── data/
-      ├── medical_document1.pdf
-      ├── medical_document2.pdf
-      └── ...
-```
-
-## 📚 Setup and Usage
-
-### Step 1: Process and Upload Documents to Pinecone
-
-Run the script to process your PDF documents and upload them to Pinecone:
+## 🐳 Docker (PostgreSQL + Redis)
 
 ```bash
-python store-index.py
+python store-index.py            # builds instance/chunks.jsonl (mounted into the container)
+docker compose up -d --build     # http://localhost:8080
+docker compose up -d --scale app=3   # more app instances (put a load balancer in front)
 ```
 
-This script will:
-- Load all PDF files from the `data/` directory
-- Split them into chunks (500 characters with 20 character overlap)
-- Generate embeddings using HuggingFace model
-- Create a Pinecone index (if it doesn't exist)
-- Upload all document chunks to Pinecone
-
-**Note**: The first run will create the index. Subsequent runs will add/update documents.
-
-### Step 2: Run the Flask Application
-
-Start the Flask server:
+## 🧪 Tests
 
 ```bash
-python app.py
+pip install -r requirements-ci.txt   # or the full requirements.txt
+python -m pytest tests -q
 ```
 
-The application will start on `http://localhost:8000`
+## 🔌 API
 
-### Step 3: Access the Web Interface
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/chat` | `{message, conversation_id?, mode?}` → NDJSON stream: `meta`, `sources`, `token`…, `done` |
+| `POST` | `/api/labs` | multipart `file` (PDF/PNG/JPG/WEBP ≤ 5 MB), `note?`, `conversation_id?` → same stream |
+| `GET` | `/api/medicine?q=` | Medicine information (openFDA) |
+| `GET` | `/api/conversations` | List your chats |
+| `GET/PATCH/DELETE` | `/api/conversations/<id>` | Read / rename / delete a chat |
+| `POST/DELETE` | `/api/conversations/<id>/share` | Create / revoke a read-only share link |
+| `POST` | `/api/messages/<id>/feedback` | `{value: 1 \| 0 \| -1}` |
+| `POST` | `/auth/signup`, `/auth/login`, `/auth/logout` | Accounts; `GET /auth/google` for Google sign-in |
+| `GET` | `/healthz` | Health check |
 
-Open your browser and navigate to:
+All state-changing requests need the `X-CSRF-Token` header (from the page's `csrf-token` meta tag).
+
+## 🏗️ Project structure
+
 ```
-http://localhost:8000
+app.py                  App factory, error handling, server entry point
+store-index.py          Builds the knowledge base (Pinecone + instance/chunks.jsonl)
+src/config.py           All settings (see .env.example)
+src/models.py           Users, conversations, messages, answer cache, usage log
+src/rag.py              Retrieval, query rewriting, streaming, citations, follow-ups, lab reports
+src/prompt.py           System prompts (chat, symptom checker, lab reports, query rewrite)
+src/routes.py           Pages and the JSON / streaming API
+src/auth.py             Sign-up, login, Google sign-in
+src/admin.py            Admin dashboard
+src/safety.py           Emergency detection and moderation
+src/medicine.py         openFDA medicine lookup
+src/security.py         Identity, CSRF, security headers, rate limiter
+migrations/             Alembic database migrations
+templates/              index, share, admin, error and offline pages
+static/                 app.js, background.js, markdown.js, styles, service worker, manifest, icons
+tests/                  pytest suite
+Dockerfile, docker-compose.yml, .github/workflows/ci.yml
 ```
-
-You can now start chatting with the medical chatbot!
-
-## 🏗️ Project Structure
-
-```
-MedicalChatbot/
-├── app.py                 # Main Flask application
-├── store-index.py         # Script to process and upload documents to Pinecone
-├── requirements.txt       # Python dependencies
-├── .env                   # Environment variables (create this)
-├── data/                  # Place your PDF documents here
-│   └── dataset.pdf
-├── src/
-│   ├── __init__.py
-│   ├── helper.py         # Utility functions for PDF loading and embeddings
-│   └── prompt.py         # System prompt for the chatbot
-├── templates/
-│   └── index.html        # Frontend HTML
-└── static/
-    └── style.css         # CSS styling
-```
-
-## 🔧 Configuration
-
-### Adjusting Chunk Size
-
-Edit `src/helper.py` to modify chunk size and overlap:
-
-```python
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,      # Adjust chunk size
-    chunk_overlap=20,    # Adjust overlap
-)
-```
-
-### Changing the LLM Model
-
-Edit `app.py` to use a different Gemini model:
-
-```python
-chatModel = ChatGoogleGenerativeAI(
-    model="gemini-pro",  # Change model here (options: gemini-pro, gemini-1.5-pro, etc.)
-    OPENAI_api_key=OPENAI_API_KEY,
-    temperature=0.7
-)
-```
-
-### Adjusting Retrieval Parameters
-
-Edit `app.py` to change the number of retrieved documents:
-
-```python
-retriever = docsearch.as_retriever(
-    search_type="similarity", 
-    search_kwargs={"k": 3}  # Change number of retrieved chunks
-)
-```
-
-## 🐛 Troubleshooting
-
-### Issue: "PINECONE_API_KEY not found"
-- Make sure you've created a `.env` file in the root directory
-- Verify the API key is correct and has no extra spaces
-
-### Issue: "Index not found"
-- Run `store-index.py` first to create the index and upload documents
-- Check that the index name matches in both `store-index.py` and `app.py`
-
-### Issue: "No documents found"
-- Ensure PDF files are in the `data/` directory
-- Check that PDF files are not corrupted
-
-### Issue: Import errors
-- Make sure all dependencies are installed: `pip install -r requirements.txt`
-- Verify you're using the correct Python version (3.8+)
-
-## 📝 Notes
-
-- **Medical Disclaimer**: This chatbot provides general medical information only. It should not replace professional medical advice, diagnosis, or treatment. Always consult qualified healthcare providers for personal medical concerns.
-
-- **API Costs**: Be aware of API usage costs for both Pinecone and Google Gemini, especially with large document sets.
-
-- **Data Privacy**: Ensure compliance with healthcare data regulations (HIPAA, GDPR, etc.) when handling medical documents.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-See LICENSE file for details.
 
 ## 👤 Author
 
-sadafsoomro53@gmail.com
-
----
-
-**Happy Chatting! 🏥💬**
+Sadaf Soomro · sadafsoomro53@gmail.com
