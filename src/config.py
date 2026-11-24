@@ -42,9 +42,12 @@ class Config:
 
     # --- Database ---------------------------------------------------------
     # SQLite by default; set DATABASE_URL (e.g. postgresql+psycopg://...) to scale out.
+    # On Vercel the project folder is read-only, so the fallback SQLite file goes to /tmp
+    # (temporary: it is wiped between cold starts, so use a hosted DATABASE_URL there).
     DATABASE_URL = os.environ.get(
         "DATABASE_URL",
-        "sqlite:///" + os.path.join(BASE_DIR, "instance", "chat.db").replace("\\", "/"),
+        "sqlite:////tmp/chat.db" if os.environ.get("VERCEL")
+        else "sqlite:///" + os.path.join(BASE_DIR, "instance", "chat.db").replace("\\", "/"),
     )
 
     # --- Session cookie hardening ------------------------------------------

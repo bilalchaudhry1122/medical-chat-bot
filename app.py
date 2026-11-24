@@ -5,6 +5,7 @@ Production:       waitress-serve --call --listen=0.0.0.0:8080 app:create_app   (
                   gunicorn -w 4 -k gthread --threads 8 -b 0.0.0.0:8080 "app:create_app()"   (Linux)
 """
 import logging
+import sys
 from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
@@ -86,8 +87,13 @@ def create_app(config_class=Config, warm_up: bool = True) -> Flask:
     return app
 
 
+# Top-level WSGI app for Vercel (and `gunicorn app:app`). Skipped under pytest so the
+# test suite can build its own app with a temporary database via create_app().
+app = None if "pytest" in sys.modules else create_app()
+
+
 if __name__ == "__main__":
-    app = create_app()
+    app = app or create_app()
     cfg = app.config
     if cfg["DEBUG"]:
         app.run(host=cfg["HOST"], port=cfg["PORT"], debug=True, use_reloader=False, threaded=True)
