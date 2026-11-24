@@ -4,13 +4,15 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/app/.cache/huggingface
+    HF_HOME=/app/.cache/huggingface \
+    EMBEDDING_PROVIDER=huggingface \
+    PINECONE_INDEX=medical-chatbot-v2 \
+    EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 
 WORKDIR /app
 
-COPY requirements.txt requirements-docker.txt setup.py ./
+COPY requirements.txt requirements-ml.txt requirements-docker.txt setup.py ./
 COPY src/__init__.py src/__init__.py
-# requirements.txt pins CPU torch via --extra-index-url (keeps the image much smaller).
 RUN pip install -r requirements-docker.txt
 
 # Bake the embedding model into the image so containers start fast and offline.

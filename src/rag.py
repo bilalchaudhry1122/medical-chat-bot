@@ -114,14 +114,18 @@ class RagService:
         from langchain_openai import ChatOpenAI
         from langchain_pinecone import PineconeVectorStore
 
-        from src.helper import download_hugging_face_embeddings
+        from src.helper import get_embeddings
 
         cfg = self._cfg
         if not cfg.PINECONE_API_KEY or not cfg.OPENAI_API_KEY:
             raise RuntimeError("PINECONE_API_KEY and OPENAI_API_KEY must be set")
         os.environ.setdefault("PINECONE_API_KEY", cfg.PINECONE_API_KEY)
+        os.environ.setdefault("OPENAI_API_KEY", cfg.OPENAI_API_KEY)
+        os.environ.setdefault("EMBEDDING_PROVIDER", cfg.EMBEDDING_PROVIDER)
+        os.environ.setdefault("EMBEDDING_MODEL", cfg.EMBEDDING_MODEL)
+        os.environ.setdefault("EMBEDDING_DIMENSIONS", str(cfg.EMBEDDING_DIMENSIONS))
 
-        embeddings = download_hugging_face_embeddings(cfg.EMBEDDING_MODEL)
+        embeddings = get_embeddings(cfg.EMBEDDING_PROVIDER, cfg.EMBEDDING_MODEL)
         store = PineconeVectorStore.from_existing_index(index_name=cfg.PINECONE_INDEX, embedding=embeddings)
         vector = store.as_retriever(search_type="similarity", search_kwargs={"k": cfg.RETRIEVER_K})
 

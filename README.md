@@ -52,42 +52,47 @@ python -m venv .venv
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env            # fill in PINECONE_API_KEY, OPENAI_API_KEY, SECRET_KEY (and ADMIN_EMAILS)
-python store-index.py           # once: builds the knowledge base from PDFs in data/
+python store-index.py           # once: OpenAI embeddings -> Pinecone index medical-chatbot-openai
 python app.py                   # http://127.0.0.1:8080
 ```
+
+> Optional local HuggingFace embeddings (not for Vercel): `pip install -r requirements-ml.txt`, then set
+> `EMBEDDING_PROVIDER=huggingface` and `PINECONE_INDEX=medical-chatbot-v2`.
 
 Database tables are created and migrated automatically on start-up (Alembic). You can also run
 `alembic upgrade head` yourself.
 
-## ▲ Deploy on Vercel
+## ▲ Deploy on Vercel (Hobby / free)
 
-The app exports a Flask `app` in `app.py`, which Vercel detects automatically. `vercel.json`
-raises the function limit to 60s / ~3 GB so chat streaming and the embedding model can load.
+Vercel cannot ship PyTorch. This app defaults to **OpenAI embeddings** (`text-embedding-3-small`)
+so the serverless bundle stays under Hobby’s ~500 MB Python limit.
+
+**Before the first deploy**, build the OpenAI Pinecone index once on your machine:
+
+```bash
+# .env must have PINECONE_API_KEY + OPENAI_API_KEY
+python store-index.py
+# creates / fills index medical-chatbot-openai (1536-d) + instance/chunks.jsonl
+```
 
 1. Push this repo to GitHub and [import it in Vercel](https://vercel.com/new).
-2. In **Project → Settings → Environment Variables**, set at least:
+2. In **Project → Settings → Environment Variables**, set:
 
    | Variable | Notes |
    |---|---|
    | `PINECONE_API_KEY` | Required |
-   | `OPENAI_API_KEY` | Required |
-   | `SECRET_KEY` | Long random string (same value in Production + Preview) |
+   | `OPENAI_API_KEY` | Required (chat + embeddings) |
+   | `SECRET_KEY` | Long random string (same in Production + Preview) |
+   | `EMBEDDING_PROVIDER` | `openai` |
+   | `PINECONE_INDEX` | `medical-chatbot-openai` |
    | `ADMIN_EMAILS` | Optional; comma-separated |
-   | `DATABASE_URL` | **Strongly recommended** — e.g. Neon `postgresql://…` (without this, SQLite in `/tmp` is wiped on every cold start) |
-   | `PUBLIC_BASE_URL` | Your Vercel URL, e.g. `https://your-app.vercel.app` (needed for Google OAuth) |
-   | `SESSION_COOKIE_SECURE` | Defaults to on when `VERCEL=1` |
+   | `DATABASE_URL` | **Strongly recommended** — Neon `postgresql://…` (else SQLite in `/tmp` is wiped on cold start) |
+   | `PUBLIC_BASE_URL` | e.g. `https://your-app.vercel.app` (Google OAuth) |
 
-3. Deploy. First requests may be slow while the HuggingFace embedding model downloads into `/tmp`.
+3. Deploy (`npx vercel` / `npx vercel --prod`).
 
-Or from the CLI:
-
-```bash
-npx vercel          # preview
-npx vercel --prod   # production
-```
-
-> The bundle includes CPU PyTorch + `sentence-transformers`. If the build hits size limits, enable
-> [Large Python Functions](https://vercel.com/docs/functions/runtimes/python) (Fluid compute) on the project.
+Commit `instance/chunks.jsonl` after `store-index.py` if you want hybrid BM25 search on Vercel
+(vector-only still works without it).
 
 ### Adding more books
 

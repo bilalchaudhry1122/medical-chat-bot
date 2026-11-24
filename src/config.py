@@ -101,8 +101,25 @@ class Config:
     # --- AI / retrieval ---------------------------------------------------
     PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-    PINECONE_INDEX = os.environ.get("PINECONE_INDEX", "medical-chatbot-v2")
-    EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+    # openai = no torch (Vercel Hobby). huggingface = local ML (Docker + requirements-ml.txt).
+    EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "openai").strip().lower()
+    # Default index matches OpenAI text-embedding-3-small (1536-d). Old HF index was medical-chatbot-v2 (384-d).
+    PINECONE_INDEX = os.environ.get(
+        "PINECONE_INDEX",
+        "medical-chatbot-v2" if EMBEDDING_PROVIDER in {"huggingface", "hf", "local"}
+        else "medical-chatbot-openai",
+    )
+    EMBEDDING_MODEL = os.environ.get(
+        "EMBEDDING_MODEL",
+        "BAAI/bge-small-en-v1.5" if EMBEDDING_PROVIDER in {"huggingface", "hf", "local"}
+        else "text-embedding-3-small",
+    )
+    EMBEDDING_DIMENSIONS = int(
+        os.environ.get(
+            "EMBEDDING_DIMENSIONS",
+            "384" if EMBEDDING_PROVIDER in {"huggingface", "hf", "local"} else "1536",
+        )
+    )
     OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
     # Cheaper model for rewriting follow-up questions into stand-alone search queries.
     REWRITE_MODEL = os.environ.get("REWRITE_MODEL", "gpt-4o-mini")

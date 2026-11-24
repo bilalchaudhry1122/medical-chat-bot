@@ -1,5 +1,5 @@
-# Production extras used by Docker: Redis for shared rate limits, error tracking.
-# (Postgres driver is already in requirements.txt for Vercel / Neon.)
+# Production extras used by Docker: Redis, Sentry, and optional local HF embeddings.
 -r requirements.txt
+-r requirements-ml.txt
 redis==5.3.1
 sentry-sdk[flask]==2.33.0

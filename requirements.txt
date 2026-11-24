@@ -1,10 +1,8 @@
-# CPU torch first so sentence-transformers does not pull a huge CUDA wheel (important for Vercel).
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.7.1
-
+# Slim deps for Vercel Hobby / local without torch (~well under the 500 MB Python limit).
+# Use OpenAI embeddings (EMBEDDING_PROVIDER=openai). For local HuggingFace embeddings,
+# also install:  pip install -r requirements-ml.txt
 langchain==0.3.26
 flask==3.1.1
-sentence-transformers==4.1.0
 pypdf==5.6.1
 python-dotenv==1.1.0
 langchain-pinecone==0.2.8
