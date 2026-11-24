@@ -1,3 +1,7 @@
+# CPU torch first so sentence-transformers does not pull a huge CUDA wheel (important for Vercel).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.1
+
 langchain==0.3.26
 flask==3.1.1
 sentence-transformers==4.1.0
@@ -12,4 +16,5 @@ Flask-Limiter==3.12
 waitress==3.0.2
 requests==2.32.4
 rank_bm25==0.2.2
--e .
+# Optional Postgres driver (Neon / Supabase / Railway) — used when DATABASE_URL is set.
+psycopg[binary]==3.2.9

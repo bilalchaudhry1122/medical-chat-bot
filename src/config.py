@@ -11,6 +11,17 @@ log = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Vercel sets VERCEL=1 (and related vars) on every serverless invocation.
+_ON_VERCEL = bool(os.environ.get("VERCEL"))
+
+# HuggingFace / sentence-transformers need a writable cache; Vercel's FS is read-only
+# except /tmp, which is wiped between cold starts.
+if _ON_VERCEL:
+    os.environ.setdefault("HF_HOME", "/tmp/huggingface")
+    os.environ.setdefault("TRANSFORMERS_CACHE", "/tmp/huggingface")
+    os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", "/tmp/huggingface")
+    os.environ.setdefault("TORCH_HOME", "/tmp/torch")
+
 
 def _bool(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
@@ -31,6 +42,19 @@ def _secret_key() -> str:
     return secrets.token_hex(32)
 
 
+def _database_url() -> str:
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        # Neon / Heroku sometimes hand out postgres://; SQLAlchemy wants postgresql://
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        return url
+    if _ON_VERCEL:
+        # Ephemeral: wiped on cold start. Set DATABASE_URL (e.g. Neon) for real persistence.
+        return "sqlite:////tmp/chat.db"
+    return "sqlite:///" + os.path.join(BASE_DIR, "instance", "chat.db").replace("\\", "/")
+
+
 class Config:
     # --- Core -------------------------------------------------------------
     SECRET_KEY = _secret_key()
@@ -42,21 +66,15 @@ class Config:
 
     # --- Database ---------------------------------------------------------
     # SQLite by default; set DATABASE_URL (e.g. postgresql+psycopg://...) to scale out.
-    # On Vercel the project folder is read-only, so the fallback SQLite file goes to /tmp
-    # (temporary: it is wiped between cold starts, so use a hosted DATABASE_URL there).
-    DATABASE_URL = os.environ.get(
-        "DATABASE_URL",
-        "sqlite:////tmp/chat.db" if os.environ.get("VERCEL")
-        else "sqlite:///" + os.path.join(BASE_DIR, "instance", "chat.db").replace("\\", "/"),
-    )
+    DATABASE_URL = _database_url()
 
     # --- Session cookie hardening ------------------------------------------
     SESSION_COOKIE_NAME = "medibot_session"
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SECURE = _bool("SESSION_COOKIE_SECURE", False)  # true behind HTTPS
+    SESSION_COOKIE_SECURE = _bool("SESSION_COOKIE_SECURE", _ON_VERCEL)  # HTTPS on Vercel
     PERMANENT_SESSION_LIFETIME = 60 * 60 * 24 * 30  # 30 days
-    TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "0"))
+    TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "1" if _ON_VERCEL else "0"))
 
     # --- Accounts ---------------------------------------------------------
     ADMIN_EMAILS = [e.lower() for e in _list("ADMIN_EMAILS")]

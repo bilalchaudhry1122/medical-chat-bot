@@ -8,11 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# CPU-only PyTorch keeps the image ~2 GB smaller than the default CUDA build.
-RUN pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
-
 COPY requirements.txt requirements-docker.txt setup.py ./
 COPY src/__init__.py src/__init__.py
+# requirements.txt pins CPU torch via --extra-index-url (keeps the image much smaller).
 RUN pip install -r requirements-docker.txt
 
 # Bake the embedding model into the image so containers start fast and offline.

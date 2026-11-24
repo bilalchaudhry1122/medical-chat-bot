@@ -44,7 +44,12 @@ answer **from those passages, with page citations**.
 
 ## 🚀 Quick start (local)
 
+Use **Python 3.12** (matches Docker and Vercel).
+
 ```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env            # fill in PINECONE_API_KEY, OPENAI_API_KEY, SECRET_KEY (and ADMIN_EMAILS)
 python store-index.py           # once: builds the knowledge base from PDFs in data/
@@ -53,6 +58,36 @@ python app.py                   # http://127.0.0.1:8080
 
 Database tables are created and migrated automatically on start-up (Alembic). You can also run
 `alembic upgrade head` yourself.
+
+## ▲ Deploy on Vercel
+
+The app exports a Flask `app` in `app.py`, which Vercel detects automatically. `vercel.json`
+raises the function limit to 60s / ~3 GB so chat streaming and the embedding model can load.
+
+1. Push this repo to GitHub and [import it in Vercel](https://vercel.com/new).
+2. In **Project → Settings → Environment Variables**, set at least:
+
+   | Variable | Notes |
+   |---|---|
+   | `PINECONE_API_KEY` | Required |
+   | `OPENAI_API_KEY` | Required |
+   | `SECRET_KEY` | Long random string (same value in Production + Preview) |
+   | `ADMIN_EMAILS` | Optional; comma-separated |
+   | `DATABASE_URL` | **Strongly recommended** — e.g. Neon `postgresql://…` (without this, SQLite in `/tmp` is wiped on every cold start) |
+   | `PUBLIC_BASE_URL` | Your Vercel URL, e.g. `https://your-app.vercel.app` (needed for Google OAuth) |
+   | `SESSION_COOKIE_SECURE` | Defaults to on when `VERCEL=1` |
+
+3. Deploy. First requests may be slow while the HuggingFace embedding model downloads into `/tmp`.
+
+Or from the CLI:
+
+```bash
+npx vercel          # preview
+npx vercel --prod   # production
+```
+
+> The bundle includes CPU PyTorch + `sentence-transformers`. If the build hits size limits, enable
+> [Large Python Functions](https://vercel.com/docs/functions/runtimes/python) (Fluid compute) on the project.
 
 ### Adding more books
 
